@@ -1,0 +1,49 @@
+name: Firewall Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-firewall:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build firewall lab image
+        run: docker build -t firewall-lab .
+
+      - name: Start firewall test container
+        run: |
+          docker run -d \
+            --name firewall-test \
+            --cap-add=NET_ADMIN \
+            -p 8080:8080 \
+            firewall-lab
+
+      - name: Install Ansible
+        run: |
+          pip install ansible
+          ansible-galaxy collection install community.docker
+
+      - name: Apply firewall configuration
+        run: ansible-playbook -i inventory.ini firewall.yml
+
+      - name: Test firewall blocks port 8080
+        run: |
+          docker exec firewall-test sh -c \
+            "python3 -m http.server 8080 >/tmp/http.log 2>&1 & echo \$! >/tmp/http.pid"
+
+          sleep 1
+
+          docker exec firewall-test sh -c \
+            'kill -0 $(cat /tmp/http.pid)'
+
+          if curl --max-time 3 http://localhost:8080; then
+            echo "ERROR: Port 8080 was reachable"
+            exit 1
+          else
+            echo "SUCCESS: Firewall blocked port 8080"
+          fi
