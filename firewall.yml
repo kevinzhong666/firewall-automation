@@ -16,3 +16,13 @@
     - name: Create filter table
       ansible.builtin.command: nft add table inet filter
       when: filter_table.rc != 0
+
+    - name: Deploy nftables configuration
+      ansible.builtin.copy:
+        src: nftables.conf
+        dest: /etc/nftables.conf
+      notify: Reload nftables
+
+  handlers:
+    - name: Reload nftables
+      ansible.builtin.command: nft -f /etc/nftables.conf
